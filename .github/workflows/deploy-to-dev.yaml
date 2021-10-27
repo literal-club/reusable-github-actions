@@ -1,0 +1,54 @@
+name: Deploy to dev
+on:
+  workflow_call:
+    inputs:
+      VERSION_TAG:
+        required: true
+        type: string
+      PROJECT:
+        required: true
+        type: string
+    secrets:
+      KUBERNETES_REPO_SSH_KEY:
+        required: true
+      KUBERNETES_REPO_KNOWN_HOSTS:
+        required: true
+
+jobs:
+  deployToDev:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [14.x]
+    steps:
+      - name: Checkout Git repo
+        uses: actions/checkout@master
+
+      ################################################################
+      # Deploy to kubernetes repo
+      ################################################################
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.KUBERNETES_REPO_SSH_KEY }}
+          known_hosts: ${{ secrets.KUBERNETES_REPO_KNOWN_HOSTS }}
+      - name: update repo
+        run: |
+          # VARIABLES
+          URL="git@github.com:literal-club/kubernetes.git"
+
+          # SETUP
+          git config --global user.email "robot@literal.club"
+          git config --global user.name "Robot"
+          git clone $URL
+          cd kubernetes
+
+          # CHANGES
+          sed -i "s/release-.*$/release-${{ inputs.VERSION_TAG }}/" ./dev/${{ inputs.PROJECT }}/base/job.yaml
+
+          # PUSH
+          git remote set-url origin $URL
+          git add .
+          git commit -m "Release ${{ inputs.PROJECT }} version ${{ inputs.VERSION_TAG }}"
+          git push
+
