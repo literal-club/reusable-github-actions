@@ -5,7 +5,7 @@ on:
       VERSION_TAG:
         required: true
         type: string
-      PROJECT:
+      TARGET_FILE:
         required: true
         type: string
     secrets:
@@ -44,7 +44,7 @@ jobs:
           cd kubernetes
 
           # CHANGES
-          sed -i "s/release-.*$/release-${{ inputs.VERSION_TAG }}/" ./dev/${{ inputs.PROJECT }}/base/job.yaml
+          sed -i "s/release-.*$/release-${{ inputs.VERSION_TAG }}/" ${{ inputs.TARGET_FILE }}
 
           # PUSH
           git remote set-url origin $URL
