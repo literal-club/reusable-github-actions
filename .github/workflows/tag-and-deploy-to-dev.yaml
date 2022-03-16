@@ -1,0 +1,75 @@
+name: Deploy to dev
+on:
+  workflow_call:
+    inputs:
+      TARGET_FILE:
+        required: true
+        type: string
+    secrets:
+      KUBERNETES_REPO_SSH_KEY:
+        required: true
+      KUBERNETES_REPO_KNOWN_HOSTS:
+        required: true
+
+jobs:
+  tagAndDeploy:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [14.x]
+    outputs:
+      tag: ${{ steps.versionBump.outputs.tag }}
+    steps:
+      - name: Checkout Git repo
+        uses: actions/checkout@master
+
+      - name: Automated Version Bump
+        id: versionBump
+        uses: TriPSs/conventional-changelog-action@v3
+        with:
+          github-token: ${{ secrets.ROBOT_USER_ACCESS_TOKEN }}
+          git-user-name: 'Mr Robot'
+          git-user-email: 'dev@literal.club'
+          tag-prefix: ''
+          skip-on-empty: 'false'
+          skip-version-file: 'true'
+          output-file: 'false'
+          skip-commit: 'true'
+      - name: Automated GitHub Release
+        uses: actions/create-release@v1
+        if: ${{ steps.versionBump.outputs.skipped == 'false' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.versionBump.outputs.tag }}
+          release_name: ${{ steps.versionBump.outputs.tag }}
+          body: ${{ steps.versionBump.outputs.clean_changelog }}
+
+      ################################################################
+      # Deploy to kubernetes repo
+      ################################################################
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.KUBERNETES_REPO_SSH_KEY }}
+          known_hosts: ${{ secrets.KUBERNETES_REPO_KNOWN_HOSTS }}
+      - name: update repo
+        run: |
+          # VARIABLES
+          URL="git@github.com:literal-club/kubernetes.git"
+
+          # SETUP
+          git config --global user.email "robot@literal.club"
+          git config --global user.name "Robot"
+          git clone $URL
+          cd kubernetes
+
+          # CHANGES
+          sed -i "s/release-.*$/release-${{ steps.versionBump.outputs.tag }}/" ${{ inputs.TARGET_FILE }}
+
+          # PUSH
+          git remote set-url origin $URL
+          git add .
+          git commit -m "Release ${{ inputs.PROJECT }} version ${{ steps.versionBump.outputs.tag }}"
+          git push
+
